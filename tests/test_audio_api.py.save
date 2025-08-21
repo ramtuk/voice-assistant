@@ -1,0 +1,26 @@
+import unittest
+import os
+from test_client import send_audio_to_assistant
+
+class TestAudioProcessing(unittest.TestCase):
+    TEST_FILE = "test_audio.wav"
+
+    def setUp(self):
+        if not os.path.exists(self.TEST_FILE):
+            os.system("arecord -D hw:2,0 -f S16_LE -c 1 -r 16000 -d 1 test_audio.wav")
+
+    def test_audio_upload(self):
+        response = send_audio_to_assistant(self.TEST_FILE)
+        self.assertIn("status", response)
+        self.assertEpython -m unittest discover -s tests
+
+
+
+
+
+
+
+qual(response["status"], "success")
+
+if __name__ == "__main__":
+    unittest.main()

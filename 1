@@ -1,0 +1,4 @@
+    handlers=[
+        logging.FileHandler(os.getenv("LOG_FILE", "app.log")),
+        logging.StreamHandler()
+    ]

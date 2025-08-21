@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Assistant Test</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        h1 {
+            color: #4a5568;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        button {
+            background: #4299e1;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            margin: 5px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #3182ce;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+        }
+        #result {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f7fafc;
+            border: 1px solid #cbd5e0;
+            border-radius: 8px;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 5px 0;
+        }
+        .success { background: #c6f6d5; color: #22543d; }
+        .error { background: #fed7d7; color: #742a2a; }
+        .loading { background: #bee3f8; color: #2c5282; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎤 Тест голосового ассистента</h1>
+        
+        <div class="section">
+            <h3>📊 Основные endpoints:</h3>
+            <button onclick="testEndpoint('/')">Status</button>
+            <button onclick="testEndpoint('/health')">Health</button>
+            <button onclick="testEndpoint('/routes')">Routes</button>
+        </div>
+
+        <div class="section">
+            <h3>🎵 Тест аудио функций:</h3>
+            <input type="file" id="audioFile" accept=".wav,.mp3,audio/*">
+            <button onclick="testAudio()">Process Audio → Текст</button>
+            <button onclick="testCommand()">Process Command → Ответ</button>
+        </div>
+
+        <div class="section">
+            <h3>📋 Результат:</h3>
+            <div id="result">Нажмите любую кнопку для тестирования...</div>
+        </div>
+
+        <div class="section">
+            <h3>📊 Статус сервера:</h3>
+            <div id="serverStatus">Проверка...</div>
+        </div>
+    </div>
+
+    <script>
+    // Проверка статуса сервера при загрузке
+    checkServerStatus();
+
+    async function checkServerStatus() {
+        try {
+            const response = await fetch('http://' + window.location.hostname + ':8000/health');
+            const data = await response.json();
+            document.getElementById('serverStatus').innerHTML = 
+                `<div class="status success">✅ Сервер работает: ${data.status}, Модель: ${data.model_loaded ? 'загружена' : 'не загружена'}</div>`;
+        } catch (error) {
+            document.getElementById('serverStatus').innerHTML = 
+                `<div class="status error">❌ Сервер недоступен: ${error}</div>`;
+        }
+    }
+
+    async function testEndpoint(endpoint) {
+        showResult('⏳ Загрузка...', 'loading');
+        try {
+            const response = await fetch('http://' + window.location.hostname + ':8000' + endpoint);
+            const data = await response.json();
+            showResult(`✅ ${endpoint}:\n${JSON.stringify(data, null, 2)}`, 'success');
+        } catch (error) {
+            showResult(`❌ Ошибка: ${error}`, 'error');
+        }
+    }
+
+    async function testAudio() {
+        const fileInput = document.getElementById('audioFile');
+        if (!fileInput.files[0]) {
+            showResult('❌ Выберите аудио файл!', 'error');
+            return;
+        }
+
+        showResult('⏳ Обрабатываю аудио...', 'loading');
+        
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+
+        try {
+            const response = await fetch('http://' + window.location.hostname + ':8000/process_audio', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await response.json();
+            showResult(`🎵 Результат распознавания:\nТекст: "${data.text}"\nЯзык: ${data.lang || data.language}\nУспех: ${data.success !== false}`, 'success');
+        } catch (error) {
+            showResult(`❌ Ошибка обработки аудио: ${error}`, 'error');
+        }
+    }
+
+    async function testCommand() {
+        const fileInput = document.getElementById('audioFile');
+        if (!fileInput.files[0]) {
+            showResult('❌ Выберите аудио файл!', 'error');
+            return;
+        }
+
+        showResult('⏳ Обрабатываю команду...', 'loading');
+        
+        const formData = new FormData();
+        formData.append('audio', fileInput.files[0]);
+
+        try {
+            const response = await fetch('http://' + window.location.hostname + ':8000/process_command', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await response.json();
+            showResult(`🤖 Результат команды:\nТекст: "${data.original_text}"\nДействие: ${data.action}\nОтвет: "${data.response}"`, 'success');
+        } catch (error) {
+            showResult(`❌ Ошибка обработки команды: ${error}`, 'error');
+        }
+    }
+
+    function showResult(text, type = '') {
+        const resultDiv = document.getElementById('result');
+        resultDiv.textContent = text;
+        resultDiv.className = type;
+    }
+
+    // Автопроверка статуса каждые 30 секунд
+    setInterval(checkServerStatus, 30000);
+    </script>
+</body>
+</html>

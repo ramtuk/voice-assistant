@@ -1,0 +1,134 @@
+import os
+import logging
+from dotenv import load_dotenv
+from fastapi import FastAPI, UploadFile, File, HTTPException, Security
+from fastapi.security import APIKeyHeader
+from fastapi.middleware.cors import CORSMiddleware
+import whisper
+import tempfile
+
+# Загрузка переменных окружения
+load_dotenv()
+
+app = FastAPI(title="Voice Assistant API")
+
+# Загрузка модели Whisper
+model = whisper.load_model(os.getenv("WHISPER_MODEL", "base"))
+
+# Конфигурация из переменных окружения
+UVICORN_HOST = os.getenv("UVICORN_HOST", "0.0.0.0")
+UVICORN_PORT = int(os.getenv("UVICORN_PORT", "8000"))
+WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base")
+
+# CORS настройки
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=os.getenv("CORS_ORIGINS", "*").split(","),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Безопасность
+api_key_header = APIKeyHeader(name="X-API-Key")
+
+async def get_api_key(api_key: str = Security(api_key_header)):
+    if api_key != os.getenv("API_KEY"):
+        raise HTTPException(status_code=403, detail="Invalid API Key")
+    return api_key
+
+# Настройка логирования
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler()
+    ]
+)
+
+@app.post("/process_audio")
+async def process_audio(file: UploadFile = File(...)):
+    """
+    Обработка аудиофайла и преобразование в текст
+    """
+    try:
+        # Сохраняем временный файл
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+            content = await file.read()
+            tmp.write(content)
+            tmp_path = tmp.name
+        
+        # Транскрибация аудио
+        result = model.transcribe(
+            tmp_path,
+            language="ru",  # Принудительно русский язык
+            task="transcribe"
+        )
+        
+        # Очистка временного файла
+        os.unlink(tmp_path)
+        
+        return {
+            "text": result["text"],
+            "language": result["language"],
+            "duration": round(result["segments"][0]["end"] if result["segments"] else 0, 2) if result["segments"] else 0
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Audio processing error: {str(e)}")
+
+@app.post("/process_command")
+async def process_command(audio: UploadFile = File(...)):
+    """
+    Обработка голосовой команды и возврат ответа
+    """
+    try:
+        # Сначала преобразуем аудио в текст
+        transcription = await process_audio(audio)
+        text = transcription["text"].lower()
+        
+        # Простая логика обработки команд
+        response = {"original_text": text, "action": None, "response": None}
+        
+        if "привет" in text:
+            response.update({"action": "greeting", "response": "И вам привет!"})
+        elif "время" in text:
+            from datetime import datetime
+            current_time = datetime.now().strftime("%H:%M")
+            response.update({"action": "time", "response": f"Сейчас {current_time}"})
+        elif "погода" in text:
+            response.update({"action": "weather", "response": "На улице 25°C, солнечно"})
+        else:
+            response.update({"action": "unknown", "response": "Не понял команду"})
+        
+        return response
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Command processing error: {str(e)}")
+
+@app.get("/")
+async def root():
+    return {"status": "running", "version": "1.0.0"}
+
+@app.get("/health")
+async def health_check():
+    return {
+        "status": "healthy",
+        "audio_device": os.getenv("AUDIO_INPUT"),
+        "whisper_model": os.getenv("WHISPER_MODEL")
+    }
+
+@app.get("/routes")
+async def get_routes():
+    """Возвращает список всех доступных endpoints"""
+    return [{"path": route.path, "methods": list(route.methods)} for route in app.routes]
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        app,
+        host=os.getenv("UVICORN_HOST", "0.0.0.0"),
+        port=int(os.getenv("UVICORN_PORT", 8000)),
+        workers=int(os.getenv("UVICORN_WORKERS", 2)),
+        log_level=os.getenv("UVICORN_LOG_LEVEL", "info")
+    )
