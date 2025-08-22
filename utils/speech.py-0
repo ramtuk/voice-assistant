@@ -1,0 +1,108 @@
+import pyttsx3
+import speech_recognition as sr
+import sounddevice as sd
+import numpy as np
+import os
+
+from config import Config
+from .vosk_recognizer import VoskRecognizer
+from .whisper_recognizer import WhisperRecognizer
+
+# Инициализация компонентов
+vosk_recognizer = VoskRecognizer() if Config.RECOGNITION_TYPE == 'vosk' else None
+whisper_recognizer = WhisperRecognizer() if Config.RECOGNITION_TYPE == 'whisper' else None
+
+# Для Google распознавания
+recognizer = None
+if Config.RECOGNITION_TYPE == 'google':
+    recognizer = sr.Recognizer()
+
+# TTS
+try:
+    # Используем espeak драйвер и указываем устройство вывода
+    os.environ['ESPEAK_DATA_PATH'] = '/usr/share/espeak-data'
+    tts_engine = pyttsx3.init(driverName='espeak')
+    
+    # Настройка голоса
+    voices = tts_engine.getProperty('voices')
+    for voice in voices:
+        if 'russian' in voice.name.lower() or 'ru' in voice.id.lower():
+            tts_engine.setProperty('voice', voice.id)
+            break
+    
+    tts_engine.setProperty('rate', Config.VOICE_RATE)
+    tts_engine.setProperty('volume', Config.VOICE_VOLUME)
+    
+except Exception as e:
+    print(f"❌ Ошибка инициализации TTS: {e}")
+    tts_engine = None
+
+def listen():
+    """Распознавание речи в зависимости от конфигурации"""
+    if Config.RECOGNITION_TYPE == 'vosk' and vosk_recognizer:
+        return vosk_recognizer.listen_vosk()
+    elif Config.RECOGNITION_TYPE == 'whisper' and whisper_recognizer:
+        return whisper_recognizer.listen_whisper()
+    elif Config.RECOGNITION_TYPE == 'google':
+        return listen_google()
+    else:
+        print(f"❌ Неизвестный тип распознавания: {Config.RECOGNITION_TYPE}")
+        return ""
+
+def listen_google():
+    """Альтернативная реализация без pyaudio"""
+    try:
+        print("🎤 Слушаю (Google alternative)...")
+
+        # Запись аудио с помощью sounddevice
+        sample_rate = 16000
+        duration = 5  # seconds
+
+        audio_data = sd.rec(int(duration * sample_rate),
+                           samplerate=sample_rate,
+                           channels=1,
+                           dtype='int16',
+                           device=0)  # USB MIC PRO
+        sd.wait()
+
+        # Конвертация для speech_recognition
+        audio_data_bytes = audio_data.flatten().tobytes()
+        
+        # Создаем AudioData объект для speech_recognition
+        audio = sr.AudioData(audio_data_bytes, sample_rate, 2)
+
+        try:
+            query = recognizer.recognize_google(audio, language='ru-RU')
+            print(f"👤 Вы сказали: {query}")
+            return query.lower()
+        except sr.UnknownValueError:
+            print("❌ Речь не распознана")
+            return ""
+        except sr.RequestError as e:
+            print(f"❌ Ошибка сервиса Google: {e}")
+            return ""
+
+    except Exception as e:
+        print(f"❌ Ошибка при прослушивании: {e}")
+        return ""
+
+def say(text):
+    """Синтез речи"""
+    print(f"🤖 Ассистент: {text}")
+    
+    if tts_engine:
+        try:
+            # Простая текстовая речь через espeak
+            tts_engine.say(text)
+            tts_engine.runAndWait()
+        except Exception as e:
+            print(f"❌ Ошибка синтеза речи: {e}")
+            # Резервный вариант - системный espeak
+            try:
+                import subprocess
+                subprocess.run(['espeak', '-v', 'russian', text], 
+                             check=False, timeout=10)
+            except:
+                print("⚠️  Синтез речи недоступен")
+    else:
+        print("⚠️  Синтез речи недоступен")

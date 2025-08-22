@@ -34,15 +34,21 @@ whisper_model = None
 
 @app.on_event("startup")
 async def startup_event():
-    """Загрузка модели при запуске"""
     global whisper_model
     try:
         import whisper
-        logging.info("Starting Whisper model loading...")
-        whisper_model = whisper.load_model("base")
-        logging.info("Whisper model loaded successfully")
-        logging.info(f"Model device: {whisper_model.device}")
-        logging.info(f"Model dimensions: {whisper_model.dims}")
+        # Прямой путь к модели
+        model_path = "/opt/voice-assistant/models/whisper/base.pt"
+        
+        if os.path.exists(model_path):
+            logging.info(f"Loading model from: {model_path}")
+            whisper_model = whisper.load_model(model_path)
+        else:
+            logging.warning("Model not found at custom path, using default")
+            whisper_model = whisper.load_model("base")
+            
+        logging.info(f"Whisper model loaded successfully on {whisper_model.device}")
+        
     except Exception as e:
         logging.error(f"Failed to load Whisper model: {e}")
         logging.exception("Full traceback:")

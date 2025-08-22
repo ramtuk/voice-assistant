@@ -1,0 +1,79 @@
+import json
+import vosk
+import sounddevice as sd
+import numpy as np
+from config import Config
+
+class VoskRecognizer:
+    def __init__(self):
+        self.model = vosk.Model(Config.VOSK_MODEL_PATH)
+        self.sample_rate = 16000  # Vosk требует именно 16000 Hz
+        self.rec = vosk.KaldiRecognizer(self.model, self.sample_rate)
+        
+    def listen_vosk(self):
+        """Оффлайн распознавание речи с помощью Vosk"""
+        print("🎤 Слушаю (Vosk)...")
+        
+        try:
+            # Используем устройство 0 (USB MIC PRO) с resampling
+            duration = 5  # seconds
+            
+            # Запись аудио с указанием sample rate и устройства
+            audio_data = sd.rec(int(duration * self.sample_rate), 
+                               samplerate=self.sample_rate, 
+                               channels=1, 
+                               dtype='int16',
+                               device=0)  # USB MIC PRO
+            sd.wait()
+            
+            # Конвертация в bytes для Vosk
+            audio_bytes = audio_data.tobytes()
+            
+            # Распознавание
+            if self.rec.AcceptWaveform(audio_bytes):
+                result = json.loads(self.rec.Result())
+                text = result.get('text', '').lower()
+                if text:
+                    print(f"👤 Вы сказали: {text}")
+                    return text
+            
+            return ""
+            
+        except Exception as e:
+            print(f"❌ Ошибка Vosk распознавания: {e}")
+            # Попробуем альтернативный метод
+            return self.listen_vosk_alternative()
+    
+    def listen_vosk_alternative(self):
+        """Альтернативный метод записи с resampling"""
+        try:
+            print("🎤 Попытка альтернативной записи...")
+            
+            # Запишем с sample rate устройства, потом преобразуем
+            original_sample_rate = 48000
+            duration = 5
+            
+            audio_data = sd.rec(int(duration * original_sample_rate),
+                               samplerate=original_sample_rate,
+                               channels=1,
+                               dtype='int16',
+                               device=0)
+            sd.wait()
+            
+            # Простое преобразование sample rate (децимация)
+            # 48000 -> 16000: берем каждый 3й sample
+            audio_data_16k = audio_data[::3]
+            audio_bytes = audio_data_16k.tobytes()
+            
+            if self.rec.AcceptWaveform(audio_bytes):
+                result = json.loads(self.rec.Result())
+                text = result.get('text', '').lower()
+                if text:
+                    print(f"👤 Вы сказали: {text}")
+                    return text
+            
+            return ""
+            
+        except Exception as e:
+            print(f"❌ Ошибка альтернативной записи: {e}")
+            return ""

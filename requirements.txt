@@ -9,4 +9,6 @@ aiohttp==3.9.1
 redis==5.0.1
 python-dotenv==1.0.0
 sounddevice==0.4.6
-numpy==1.24.3
+numpy==1.26.0  # Обновлено для совместимости с Python 3.12
+speechrecognition==3.10.0
+pyaudio==0.2.13  # Обновленная версия

@@ -1,0 +1,74 @@
+import pyttsx3
+import speech_recognition as sr
+from config import Config
+from .vosk_recognizer import VoskRecognizer
+from .whisper_recognizer import WhisperRecognizer
+
+# Инициализация компонентов
+vosk_recognizer = VoskRecognizer() if Config.RECOGNITION_TYPE == 'vosk' else None
+whisper_recognizer = WhisperRecognizer() if Config.RECOGNITION_TYPE == 'whisper' else None
+
+# Для Google распознавания
+if Config.RECOGNITION_TYPE == 'google':
+    recognizer = sr.Recognizer()
+    microphone = sr.Microphone()
+    with microphone as source:
+        recognizer.adjust_for_ambient_noise(source, duration=1)
+
+# TTS
+try:
+    tts_engine = pyttsx3.init()
+    voices = tts_engine.getProperty('voices')
+    if len(voices) > 1:
+        tts_engine.setProperty('voice', voices[1].id)
+    tts_engine.setProperty('rate', Config.VOICE_RATE)
+    tts_engine.setProperty('volume', Config.VOICE_VOLUME)
+except Exception as e:
+    print(f"❌ Ошибка инициализации TTS: {e}")
+    tts_engine = None
+
+def listen():
+    """Распознавание речи в зависимости от конфигурации"""
+    if Config.RECOGNITION_TYPE == 'vosk' and vosk_recognizer:
+        return vosk_recognizer.listen_vosk()
+    elif Config.RECOGNITION_TYPE == 'whisper' and whisper_recognizer:
+        return whisper_recognizer.listen_whisper()
+    else:
+        return listen_google()
+
+def listen_google():
+    """Распознавание через Google"""
+    try:
+        with microphone as source:
+            print("🎤 Слушаю (Google)...")
+            audio = recognizer.listen(source, timeout=3, phrase_time_limit=5)
+        
+        try:
+            query = recognizer.recognize_google(audio, language=f'{Config.LANGUAGE}-RU')
+            print(f"👤 Вы сказали: {query}")
+            return query.lower()
+        except sr.UnknownValueError:
+            print("❌ Речь не распознана")
+            return ""
+        except sr.RequestError as e:
+            print(f"❌ Ошибка сервиса Google: {e}")
+            return ""
+            
+    except sr.WaitTimeoutError:
+        print("⏰ Таймаут ожидания голоса")
+        return ""
+    except Exception as e:
+        print(f"❌ Ошибка при прослушивании: {e}")
+        return ""
+
+def say(text):
+    """Синтез речи"""
+    print(f"🤖 Ассистент: {text}")
+    if tts_engine:
+        try:
+            tts_engine.say(text)
+            tts_engine.runAndWait()
+        except Exception as e:
+            print(f"❌ Ошибка синтеза речи: {e}")
+    else:
+        print("⚠️  Синтез речи недоступен")
