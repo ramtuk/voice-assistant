@@ -2,7 +2,7 @@ import speech_recognition as sr
 import sounddevice as sd
 import numpy as np
 import os
-
+from utils.logger import logger
 from config import Config
 from .vosk_recognizer import VoskRecognizer
 from .whisper_recognizer import WhisperRecognizer
@@ -21,6 +21,8 @@ tts_engine = None
 
 def listen():
     """Распознавание речи в зависимости от конфигурации"""
+    logger.debug("Начало прослушивания...")
+
     if Config.RECOGNITION_TYPE == 'vosk' and vosk_recognizer:
         return vosk_recognizer.listen_vosk()
     elif Config.RECOGNITION_TYPE == 'whisper' and whisper_recognizer:
@@ -70,5 +72,6 @@ def listen_google():
 
 def say(text):
     """Синтез речи - только текстовый вывод"""
+    logger.info(f"🤖 Ассистент: {text}")
     print(f"🤖 Ассистент: {text}")
     # Звуковой вывод отключен для упрощения

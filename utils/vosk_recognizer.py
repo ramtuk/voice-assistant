@@ -6,6 +6,7 @@ from config import Config
 import subprocess
 import tempfile
 import os
+from utils.logger import logger
 
 class VoskRecognizer:
     def __init__(self):
@@ -22,7 +23,8 @@ class VoskRecognizer:
 
     def listen_vosk(self):
         """Оффлайн распознавание речи с помощью Vosk"""
-        print("🎤 Слушаю (Vosk)...")
+        logger.debug("🎤 Слушаю (Vosk)...")
+        
         
         # Пробуем все устройства по порядку
         for device in self.devices_priority:
@@ -112,7 +114,8 @@ class VoskRecognizer:
                 print(f"❌ Ошибка arecord ({device}): {e}")
             return ""
         except Exception as e:
-            print(f"❌ Ошибка обработки ({device}): {e}")
+        #    print(f"❌ Ошибка обработки ({device}): {e}")
+            logger.error(f"Ошибка с устройством {device}: {e}")
             return ""
 
     def record_with_sounddevice_fallback(self):
